@@ -1,7 +1,9 @@
 package com.kr.expenserecoder
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
 //import android.databinding.tool.writer.Scope
 //import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
@@ -10,8 +12,11 @@ import android.os.Environment
 //import android.text.Layout
 //import android.text.StaticLayout
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,20 +60,30 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.border
 import androidx.compose.material3.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.net.toUri
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.WatchEvent
 import java.time.LocalDate
 import java.time.format.TextStyle
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 
 //private var Paint.isFakeBoldText: Boolean
 //private var Paint.textSize: Float
@@ -91,6 +106,7 @@ fun getMonthName(number: Int): String {
         .month
         .getDisplayName(TextStyle.FULL, Locale.ENGLISH)
 }
+@SuppressLint("ContextCastToActivity")
 @Composable
 fun StylishForm(viewModel : MyViewModel) {
     var name by remember { mutableStateOf("") }
@@ -98,12 +114,18 @@ fun StylishForm(viewModel : MyViewModel) {
     var date by remember { mutableStateOf("") }
     val context = LocalContext.current
 
+    val activity = LocalContext.current as Activity
+    // Capture back gesture
+    BackHandler(enabled = true) {
+        activity.finishAffinity() // exit app
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()) // scroll if needed
             .background(
-                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                brush = Brush.verticalGradient(
                     listOf(Color(0xFF2193b0), Color(0xFF6dd5ed))
                 )
             ),
@@ -133,7 +155,7 @@ fun StylishForm(viewModel : MyViewModel) {
                     value = name,
                     onValueChange = { input ->
                         // Allow only alphabets and max length 30
-                        if (input.length <= 30 && input.all { it.isLetter() || it.isWhitespace() }) {
+                        if (input.length <= 30 && input.all { it.isLetter() || it.isWhitespace() || it.isDigit() }) {
                             name = input
                         }
                     },
@@ -152,8 +174,23 @@ fun StylishForm(viewModel : MyViewModel) {
                 OutlinedTextField(
                     value = price,
                     onValueChange = { newValue ->
-                        price = newValue.filter { it.isDigit() }
-                    },
+                        if (newValue.length <= 9) { // limit length to 9
+                            // allow only digits and at most one '.'
+                            val filtered = buildString {
+                                var dotAdded = false
+                                for (ch in newValue) {
+                                    if (ch.isDigit()) {
+                                        append(ch)
+                                    } else if (ch == '.' && !dotAdded) {
+                                        append(ch)
+                                        dotAdded = true
+                                    }
+                                }
+                            }
+                            price = filtered
+                        }
+                    }
+                    ,
                     label = { Text("Price") },
                     placeholder = { Text("e.g., 100", color = Color.LightGray) },
                     shape = RoundedCornerShape(12.dp),
@@ -187,7 +224,7 @@ fun StylishForm(viewModel : MyViewModel) {
                             if (date.isBlank()){
                                 date = getCurrentDate()
                             }
-                            viewModel.insert(name, price.toInt(),date)
+                            viewModel.insert(name, price.toFloat(),date)
                             Toast.makeText(
                                 context,
                                 "Record $name with $price Saved",
@@ -209,6 +246,7 @@ fun StylishForm(viewModel : MyViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
+                    elevation = ButtonDefaults.buttonElevation(4.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF2193b0),
                         contentColor = Color.White
@@ -226,7 +264,7 @@ fun StylishForm(viewModel : MyViewModel) {
 @Composable
 fun MyScreen(viewModel: MyViewModel) {
     val context = LocalContext.current
-
+    var showDialog by remember { mutableStateOf(false) }
     val allItems by viewModel.allItems.collectAsState()
 
     var selectedMonthNumber by remember { mutableStateOf(getCurrentDate(true).toInt()) }
@@ -246,7 +284,7 @@ fun MyScreen(viewModel: MyViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFB9D4DC), Color(0xFFB3A8D7))
+                    listOf(Color(0xFF6dd5ed),Color(0xFF2193b0))
                 )
             )
             .padding(8.dp)
@@ -269,43 +307,69 @@ fun MyScreen(viewModel: MyViewModel) {
 
         Spacer(Modifier.height(12.dp))
 
-        // 🔹 Action Cards Row
+        //  Action Cards Row
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .background(Color.Transparent),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             ActionCard(
-                icon = Icons.Default.Delete,
-                iconTint = Color.Red,
                 text = "Delete All",
-                textColor = Color.Red
-            ) {
-                viewModel.deleteall()
-                Toast.makeText(context, "All deleted", Toast.LENGTH_SHORT).show()
-            }
-
-            ActionCard(
-                icon = Icons.Default.Delete,
-                iconTint = Color.Blue,
-                text = "Delete Month",
-                textColor = Color.Blue
-            ) {
-                try {
-                    viewModel.deleteMonth(selectedMonthNumber)
-                    Toast.makeText(context, "Month $selectedMonthName deleted", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                ImageId = R.drawable.delete_red,
+                textColor = Color.Red,
+                onClick = {
+//                    viewModel.deleteall()
+//                    Toast.makeText(context, "All Saved deleted", Toast.LENGTH_SHORT).show()
+                    showDialog = true
+                },
+                onLongClick = {
+                    Toast.makeText(context, "Use to Delete all month record at same time", Toast.LENGTH_LONG).show()
                 }
+            )
+            if (showDialog) {
+                ConfirmDialog(
+                    title = "Confirm Delete",
+                    message = "Are you sure to delete all months saved items?",
+                    color = Color.Red,
+                    onConfirm = {
+                        viewModel.deleteall()
+                        Toast.makeText(context, "All Saved deleted", Toast.LENGTH_SHORT).show()
+                        showDialog = false
+                    },
+                    onDismiss = {
+                        showDialog = false
+                    }
+                )
             }
 
             ActionCard(
-                icon = Icons.Default.ExitToApp,
-                iconTint = Color(0xFF4CAF50),
+                text = "Delete Month",
+                ImageId = R.drawable.delete_blue,
+                textColor = Color.Blue,
+                onClick = {
+                    try {
+                        viewModel.deleteMonth(selectedMonthNumber)
+                        Toast.makeText(context, "Month $selectedMonthName deleted", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onLongClick = {
+                    Toast.makeText(context, "Use to Delete current month record ", Toast.LENGTH_LONG).show()
+                }
+            )
+
+            ActionCard(
                 text = "Save PDF",
-                textColor = Color(0xFF4CAF50)
-            ) {
-                saveToPDF(filteredItems, context, total.toInt())
-            }
+                ImageId = R.drawable.download_blue,
+                textColor = Color(0xFF4CAF50),
+                onClick = {
+                    saveToPDF(filteredItems, context, total.toInt())
+                },
+                onLongClick = {
+                    Toast.makeText(context, "Save this month record as PDF in Download/Expense folder", Toast.LENGTH_LONG).show()
+                }
+            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -339,7 +403,7 @@ fun MyScreen(viewModel: MyViewModel) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF6dd5ed))
+                        .background(Color(0xFF2193b0))
                         .padding(vertical = 4.dp)
                 ) {
                     TableCell("ID", true)
@@ -357,7 +421,7 @@ fun MyScreen(viewModel: MyViewModel) {
                     ) {
                         TableCell(item.id.toString())
                         TableCell(item.name)
-                        TableCell("Rs. ${item.price.toInt()}")
+                        TableCell("Rs. ${item.price}")
                         TableCell(item.date)
                     }
                     Divider()
@@ -367,46 +431,41 @@ fun MyScreen(viewModel: MyViewModel) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ActionCard(
-    icon: ImageVector,
-    iconTint: Color,
     text: String,
+    ImageId: Int,
     textColor: Color = Color.Black,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null // optional
 ) {
     Card(
         modifier = Modifier
-            .size(90.dp) // uniform square
-            .clickable { onClick() }, // ✅ full card clickable
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
-        border = BorderStroke(1.dp, Color.Gray)
+            .size(40.dp) // uniform square
+            .combinedClickable(
+                onClick = { onClick() },
+                onLongClick = { onLongClick?.invoke() }
+            ),
+        shape = RoundedCornerShape(70.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = icon,
-                tint = iconTint,
-                contentDescription = text,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = text,
-                fontSize = 10.sp,
-                color = textColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Image(
+            painter = painterResource(id = ImageId),
+            contentDescription = text
+        )
+        // If you want text below image uncomment and wrap in Column
+        // Text(
+        //     text = text,
+        //     fontSize = 10.sp,
+        //     color = textColor,
+        //     maxLines = 1,
+        //     overflow = TextOverflow.Ellipsis
+        // )
     }
 }
+
 
 @Composable
 fun RowScope.TableCell(
@@ -441,7 +500,7 @@ fun saveToPDF(items: List<MyEntity>, context: Context, total: Int) {
     var pageNumber = 1
 
     // Paint setup
-    val paint = android.graphics.Paint().apply {
+    val paint = Paint().apply {
         textSize = 12f
         isFakeBoldText = false
     }
@@ -527,86 +586,176 @@ fun saveToPDF(items: List<MyEntity>, context: Context, total: Int) {
 }
 
 
-//fun drawMultilineText(canvas: Canvas, text: String, x: Float, y: Float, paint: TextPaint, maxWidth: Int): Float {
-//    val staticLayout = StaticLayout.Builder.obtain(text, 0, text.length, paint, maxWidth)
-//        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-//        .setLineSpacing(0f, 0f)
-//        .setIncludePad(false)
-//        .build()
-//
-//    canvas.save()
-//    canvas.translate(x, y)
-//    staticLayout.draw(canvas)
-//    canvas.restore()
-//
-//    // return height used so we can move y for next row
-//    return staticLayout.height.toFloat()
-//}
-
-
 @Composable
-fun devCont(context: Context) {
-    Card(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F2F5))
-    ) {
-        Row(
+fun DevCont(context: Context) {
+
+    VideoBackgroundBox(videoResId = R.raw.guitar) {
+
+        Column(
             modifier = Modifier
                 .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Profile Icon
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Developer",
-                tint = Color(0xFF1565C0),
-                modifier = Modifier.size(40.dp)
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Name + Phone
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Keshav",
-                    color = Color.Black,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    )
+            Card(
+                modifier = Modifier
+                    .padding(16.dp),
+                //.fillMaxWidth(),
+                shape = RoundedCornerShape(100.dp),
+                elevation = CardDefaults.cardElevation(6.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F2F5))
+//                colors = CardDefaults.cardColors(
+//                    containerColor = Color.Transparent
+//                )
+            ) {
+                // Profile Icon
+                Image(
+                    painter = painterResource(id = R.drawable.devlogo),
+                    contentDescription = "Developer",
+                    modifier = Modifier.size(60.dp)
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            data = "tel:+917292870631".toUri()
-                        }
-                        context.startActivity(intent)
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Phone,
-                        contentDescription = "Phone",
-                        tint = Color(0xFF2E7D32),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "+91 7292870631",
-                        color = Color(0xFF2E7D32),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium
-                        )
-                    )
-                }
             }
+
+            Card(
+                modifier = Modifier
+                    .padding(16.dp),
+                shape = RoundedCornerShape(5.dp),
+                elevation = CardDefaults.cardElevation(1.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Transparent
+                )
+            ) {
+                    Column(
+                        modifier = Modifier
+                            .background(Color.Transparent),
+                    )
+                    {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                    data = "tel:+917292870631".toUri()
+                                }
+                                context.startActivity(intent)
+                            }
+                                .padding(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = "Phone",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(modifier = Modifier.weight(1f) .background(Color.Transparent))
+
+                            Text(
+                                text = "+91 7292870631",
+                                color = Color(0xFF2E7D32),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Black
+                                )
+                            )
+                        }
+
+                        Divider()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data =
+                                        "mailto:keshavrajbingo@gmail.com".toUri() // recipient email
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
+                                        "Feedback for Expense Recoder App"
+                                    )
+                                }
+                                context.startActivity(intent)
+                            }
+                                .padding(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Email,
+                                contentDescription = "email",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            Text(
+                                text = "Keshavrajbingo@gmail.com",
+                                color = Color(0xFF2E7D32),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                        Divider()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    "https://www.github.com/blackshark1213/".toUri()
+                                )
+                                context.startActivity(intent)
+                            }
+                                .padding(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "github",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            Text(
+                                text = "blackshark1213",
+                                color = Color(0xFF2E7D32),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                        Divider()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    "https://www.linkedin.com/in/dev-keshav".toUri()
+                                )
+                                context.startActivity(intent)
+                            }
+                                .padding(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Linkedin",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            Text(
+                                text = "dev-keshav",
+                                color = Color(0xFF2E7D32),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                }
+
+            } // card end
         }
     }
-}
+    }// End of method
 // drop down menu
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -665,3 +814,33 @@ fun MonthDropdown(
             }
         }
     }
+
+// User confirmation dialog
+@Composable
+fun ConfirmDialog(
+    title: String,
+    message: String,
+    color : Color,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = title, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Text(message, color = color)
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Yes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("No")
+            }
+        }
+    )
+}
