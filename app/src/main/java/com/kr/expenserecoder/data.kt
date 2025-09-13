@@ -16,7 +16,7 @@ abstract class MyDatabase : RoomDatabase() {
 data class MyEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
-    val price: Int,
+    val price: Float,
     val date : String,
 )
 
