@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -59,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -127,13 +129,14 @@ class MainActivity : ComponentActivity() {
                                 composable("form") { StylishForm(viewModel) }
                                 composable("show") { MyScreen(viewModel) }
 //                            composable("update") { Update() }
-                            composable("dev") { devCont(context = LocalContext.current) }
+                            composable("dev") { DevCont(context = LocalContext.current) }
                             }
                     }
                 }
             }
         }
     }
+
 
 
     // Top Bar ---
@@ -147,26 +150,34 @@ class MainActivity : ComponentActivity() {
         )
         TopAppBar(
             title = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo),
-                            contentDescription = "App Logo",
-                            modifier = Modifier
-                                .size(45.dp)
-                                .background(Color.Transparent)
-                                .clickable {
-                                    // EDIT IN FUTURE
-                                }
-                        )
-//                    TypingText(appName)
-                        Text("Your Expense", color = Color.Black)
-                    }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .padding(2.dp),
+                                //.fillMaxWidth(),
+                                shape = RoundedCornerShape(80.dp),
+                                elevation = CardDefaults.cardElevation(6.dp),
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.logo),
+                                    contentDescription = "App Logo",
+                                    modifier = Modifier
+                                        .size(45.dp)
+                                        .background(Color.Transparent)
+                                        .clickable {
+                                            // EDIT IN FUTURE
+                                        }
+                                )
+                            }
+//                            Text("Your Expense", color = Color.Black)
+                        }
+
                 }
             },
             navigationIcon = {
